@@ -50,13 +50,18 @@
     throw err;
   }
 
-  document.addEventListener('DOMContentLoaded', function (event) {
-    findAndProcessFlatpickrInputs(document);
-    document.addEventListener('DOMNodeInserted', function (event) {
-      setTimeout(() => {
-        if (event.target.querySelectorAll) findAndProcessFlatpickrInputs(event.target);
+  const observer = new MutationObserver((records, _observer) => {
+    records.forEach(record => {
+      record.addedNodes.forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) findAndProcessFlatpickrInputs(node)
       });
     });
+  });
+
+  observer.observe(document.body, {childList: true})
+
+  document.addEventListener('DOMContentLoaded', function (event) {
+    findAndProcessFlatpickrInputs(document.body);
   });
 
   /**
