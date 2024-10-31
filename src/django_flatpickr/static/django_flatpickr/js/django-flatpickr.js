@@ -53,7 +53,7 @@
   const observer = new MutationObserver((records, _observer) => {
     records.forEach(record => {
       record.addedNodes.forEach(node => {
-        if (node.nodeType === Node.ELEMENT_NODE) findAndProcessFlatpickrInputs(node)
+        if (node.querySelectorAll) findAndProcessFlatpickrInputs(node);
       });
     });
   });
