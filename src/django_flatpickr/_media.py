@@ -1,5 +1,5 @@
 from typing import Iterable
-
+from django.utils.html import format_html
 from django_flatpickr.schemas import FlatpickrOptions
 from django_flatpickr.settings import DjangoFlatpickrSettings
 
@@ -9,7 +9,9 @@ def yield_js_files(
 ) -> Iterable[str]:
     """Yield JavaScript media files for the widget."""
     yield settings.flatpickr_cdn_url + "flatpickr.min.js"
-    yield settings.app_static_url + "js/django-flatpickr.js"
+    #yield settings.app_static_url + "js/django-flatpickr.js"
+    path=f"django_flatpickr/js/django-flatpickr.js"
+    yield format_html('<script src="{}" defer></script>', static(path))
     if options.locale:
         yield settings.flatpickr_cdn_url + f"l10n/{options.locale}.js"
 
