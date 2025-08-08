@@ -1,16 +1,19 @@
-[tool.poetry]
+[project]
 name = "django-flatpickr"
-version = "0.0.0"
-description = """\
+version = "0.0.1"
+description = """
     Flatpickr based DatePickerInput, TimePickerInput and \
     DateTimePickerInput with date-range-picker functionality \
     for django >= 2.0\
+    Modified to support dom up dates from htmx etc\
+    And template tage loads from local version\
     """
-authors = ["Munim Munna <6266677+monim67@users.noreply.github.com>"]
-repository = "https://github.com/monim67/django-flatpickr"
-license = "MIT"
+authors = [
+    {name = "Munim Munna", email = "6266677+monim67@users.noreply.github.com"}
+]
+requires-python = ">=3.8"
+license = {text = "MIT"}
 readme = "README.rst"
-packages = [{ include = "django_flatpickr", from = "src" }]
 keywords = [
     "django",
     "flatpickr",
@@ -32,40 +35,50 @@ classifiers = [
     "Framework :: Django :: 4.0",
     "Framework :: Django :: 5.0",
 ]
+dependencies = [
+    "Django>=2,<6",
+    "pydantic>=1,<3",
+    "pydantic-settings",
+    "typing-extensions",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-Django = ">=2,<6"
-pydantic = ">=1,<3"
-pydantic-settings = "*"
-typing-extensions = "*"
+[project.urls]
+repository = "https://github.com/monim67/django-flatpickr"
 
-[tool.poetry.group.build.dependencies]
-pytest-django = "^4.5.2"
-pytest-dotenv = "^0.5.2"
-black = "^22.6.0"
-isort = "^5.10.1"
-pydocstyle = {extras = ["toml"], version = "^6.1.1"}
-mypy = "^1.0.1"
-django-stubs = "^1.12.0"
-coverage = { extras = ["toml"], version = "^6.5.0" }
-pylint = "^2.12.0"
-rstcheck = "^6.1.0"
-pywebcopy = "^7.0.2"
-poethepoet = "^0.15.0"
-django-crispy-forms = "^1.14.0"
-crispy-bulma = "^0.8.0"
-django-filter = "^22.1"
+[tool.uv]
+package = true
+#packages = [{ include = "django_flatpickr", from = "src" }]
+#version-file = "src/django_flatpickr/__init__.py"
 
-[tool.poetry.group.dev.dependencies]
-tox = "^3.24.5"
-pre-commit = "^2.20.0"
+#
+#
+#
+#[tool.uv.dependencies]
+#dev = [
+#    "tox>=3.24.5",
+#    "pre-commit>=2.20.0",
+#]
+#build = [
+#    "pytest-django>=4.5.2",
+#    "pytest-dotenv>=0.5.2",
+#    "black>=22.6.0",
+#    "isort>=5.10.1",
+#    "pydocstyle[toml]>=6.1.1",
+#    "mypy>=1.0.1",
+#    "django-stubs>=1.12.0",
+#    "coverage[toml]>=6.5.0",
+#    "pylint>=2.12.0",
+#    "rstcheck>=6.1.0",
+#    "pywebcopy>=7.0.2",
+#    "poethepoet>=0.15.0",
+#    "django-crispy-forms>=1.14.0",
+#    "crispy-bulma>=0.8.0",
+#    "django-filter>=22.1",
+#]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry_bumpversion.file."src/django_flatpickr/__init__.py"]
+requires = ["uv_build>=0.8.6,<0.9.0"]
+build-backend = "uv_build"
 
 [tool.pylint.master]
 disable = ["R", "C", "missing-docstring", "unused-argument"]
@@ -120,11 +133,11 @@ isolated_build = True
 envlist = py{311,310,39,38}
 
 [testenv]
-allowlist_externals = poetry
+allowlist_externals = uv
 skip_install = true
 commands =
-    poetry install --no-root --only build
-    pip install -c tests/pip-constraints.txt .
+    uv pip install --group build
+    uv pip install -c tests/pip-constraints.txt .
     pytest
 """
 
