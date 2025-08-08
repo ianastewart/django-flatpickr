@@ -2,7 +2,7 @@ from typing import Iterable
 from django.utils.html import format_html
 from django_flatpickr.schemas import FlatpickrOptions
 from django_flatpickr.settings import DjangoFlatpickrSettings
-
+from django.templatetags.static import static
 
 def yield_js_files(
     settings: DjangoFlatpickrSettings, options: FlatpickrOptions
