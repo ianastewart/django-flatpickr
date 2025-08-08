@@ -11,7 +11,7 @@
    * @property {FlatpickrOptions} config
    *
    * @typedef {object} FlatpickrOptions
-   * @property {FlatpickrHookFunction[]} onChange
+   * @property {FlatpickrHookFunction[]|FlatpickrHookFunction|undefined} onChange
    *
    * @callback FlatpickrHookFunction
    * @param {Date[]} selectedDates
@@ -19,7 +19,7 @@
    * @param {FlatpickrInstance} instance
    *
    * @typedef {object} DjangoFlatpickrConfig
-   * @property {string} range_from
+   * @property {string} [range_from]
    * @property {FlatpickrOptions} options
    */
 
@@ -31,9 +31,9 @@
      * @param {string} message
      */
     constructor(inputElement, message) {
-      super(`input name: ${inputElement.name}; ${message}`);
+      super(`input name: ${inputElement?.name || "<unknown>"}; ${message}`);
       this.name = "django-flatpickr error";
-      this.inputElement = inputElement
+      this.inputElement = inputElement;
     }
   }
 
@@ -41,44 +41,61 @@
    * @param {DjangoFlatpickrError} err
    */
   function handleError(err) {
-    if (err.inputElement.hasAttribute('data-debug')) {
+    if (err.inputElement && err.inputElement.hasAttribute('data-debug')) {
       const errDisplay = document.createElement("b");
       errDisplay.innerHTML = "Check browser console for errors, Set django DEBUG=False to hide this error message";
       errDisplay.style.color = "red";
       err.inputElement.after(errDisplay);
     }
+    // Re-throw so errors are visible in console during development
     throw err;
   }
 
-  const observer = new MutationObserver((records, _observer) => {
-    records.forEach(record => {
-      record.addedNodes.forEach(node => {
-        if (node.querySelectorAll) findAndProcessFlatpickrInputs(node);
+  /**
+   * Start observing DOM changes once the body is available.
+   */
+  function startObserver() {
+    if (!document.body) return; // will be retried on DOMContentLoaded
+    const observer = new MutationObserver((records) => {
+      records.forEach(record => {
+        record.addedNodes.forEach(node => {
+          // If the added node is an element or contains elements, scan it.
+          if (node.querySelectorAll) findAndProcessFlatpickrInputs(node);
+        });
       });
     });
-  });
+    // Observe subtree as well to catch nested additions
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 
-  observer.observe(document.body, {childList: true})
-
-  document.addEventListener('DOMContentLoaded', function (event) {
+  if (document.readyState === "loading") {
+    document.addEventListener('DOMContentLoaded', function () {
+      startObserver();
+      findAndProcessFlatpickrInputs(document.body);
+    });
+  } else {
+    // DOM is already ready
+    startObserver();
     findAndProcessFlatpickrInputs(document.body);
-  });
+  }
 
   /**
    * @param {HTMLElement} htmlElement
    */
   function findAndProcessFlatpickrInputs(htmlElement) {
     /** @type {NodeListOf<HTMLInputElement>} */
-    const inputElements = htmlElement.querySelectorAll('[data-fpconfig]:not([disabled])')
+    const inputElements = htmlElement.querySelectorAll('[data-fpconfig]:not([disabled])');
     for (const inputElement of inputElements) {
       try {
-        if (typeof flatpickr == 'function') {
+        // Skip if already initialized
+        if (flatpickrInstances.has(inputElement)) continue;
+
+        if (typeof flatpickr === 'function') {
           createFlatpickrInstance(inputElement);
         } else {
-          throw Error('flatpickr js/css resources was not loaded, please check your CDN links');
+          throw Error('flatpickr js/css resources were not loaded, please check your CDN links');
         }
-      }
-      catch (err) {
+      } catch (err) {
         handleError(new DjangoFlatpickrError(inputElement, err.message));
       }
     }
@@ -88,10 +105,22 @@
    * @param {HTMLInputElement} inputElement
    */
   function createFlatpickrInstance(inputElement) {
+    // Avoid duplicate init
+    if (flatpickrInstances.has(inputElement)) return;
+
     const config = getConfig(inputElement);
     const inputWrapper = inputElement.closest('.django-flatpickr');
-    if (!inputWrapper) throw Error('input must have a parent with class="django-flatpickr"')
+    if (!inputWrapper) throw Error('input must have a parent with class="django-flatpickr"');
+
+    // Ensure wrapper mode is on when binding to a wrapper
+    if (!config.options) config.options = {};
+    if (inputWrapper && config.options.wrap !== true) {
+      config.options.wrap = true;
+    }
+
+    // Mark inner input so flatpickr can find it in wrap mode
     inputElement.setAttribute('data-input', '');
+
     /** @type {FlatpickrInstance} */
     const flatpickrInstance = flatpickr(inputWrapper, config.options);
     flatpickrInstances.set(inputElement, flatpickrInstance);
@@ -110,10 +139,12 @@
   function getConfig(inputElement) {
     let /** @type {DjangoFlatpickrConfig} */ config;
     try {
-      config = JSON.parse(inputElement.getAttribute('data-fpconfig'));
+      const raw = inputElement.getAttribute('data-fpconfig');
+      config = JSON.parse(raw);
+    } catch (_err) {
+      throw Error("Invalid config");
     }
-    catch (err) { throw Error("Invalid config") }
-    const optionKeyName = inputElement.name.replace(/^(.*-)?/, "djangoFlatpickrOptions_")
+    const optionKeyName = inputElement.name.replace(/^(.*-)?/, "djangoFlatpickrOptions_");
     config.options = { ...window.djangoFlatpickrOptions, ...window[optionKeyName], ...config.options };
     return config;
   }
@@ -124,13 +155,28 @@
    */
   function getRangeFromInputElement(inputElement, config) {
     const rangeFromInputName = inputElement.name.replace(/[^-]+$/, config.range_from);
+    /** @type {Element|RadioNodeList|null} */
     let fromInputElement = inputElement.form?.elements.namedItem(rangeFromInputName);
-    if (!fromInputElement) {
+
+    // If namedItem returns a RadioNodeList (multiple inputs with same name), pick the first input
+    if (fromInputElement && typeof RadioNodeList !== "undefined" && fromInputElement instanceof RadioNodeList) {
+      fromInputElement = fromInputElement[0] || null;
+    }
+
+    if (!fromInputElement || !(fromInputElement instanceof HTMLInputElement)) {
       const elements = document.querySelectorAll(`input[name="${config.range_from}"]`);
-      if (elements.length == 0) throw Error("range_from not found");
+      if (elements.length === 0) throw Error("range_from not found");
       if (elements.length > 1) throw Error("Multiple range_from found");
       fromInputElement = elements[0];
     }
+
+    // If the "from" input isn't initialized yet, initialize it now (order independent)
+    if (!flatpickrInstances.has(fromInputElement)) {
+      if (typeof flatpickr === 'function' && fromInputElement.hasAttribute('data-fpconfig')) {
+        createFlatpickrInstance(fromInputElement);
+      }
+    }
+
     if (flatpickrInstances.has(fromInputElement)) {
       return flatpickrInstances.get(fromInputElement);
     } else {
@@ -145,14 +191,14 @@
   function configureRangeSelection(fromInstance, toInstance) {
     registerOnTimeValueChange(fromInstance, function (selectedDates) {
       toInstance.set('minDate', selectedDates[0] || false);
-      if (fromInstance.isMobile && toInstance.isMobile) {
-        toInstance.mobileInput.min = fromInstance.mobileInput.value;
+      if (fromInstance.isMobile && toInstance.isMobile && toInstance.mobileInput && fromInstance.mobileInput) {
+        toInstance.mobileInput.min = fromInstance.mobileInput.value || "";
       }
     });
     registerOnTimeValueChange(toInstance, function (selectedDates) {
       fromInstance.set('maxDate', selectedDates[0] || false);
-      if (fromInstance.isMobile && toInstance.isMobile) {
-        fromInstance.mobileInput.max = toInstance.mobileInput.value;
+      if (fromInstance.isMobile && toInstance.isMobile && toInstance.mobileInput && fromInstance.mobileInput) {
+        fromInstance.mobileInput.max = toInstance.mobileInput.value || "";
       }
     });
   }
@@ -164,8 +210,19 @@
    * @param {FlatpickrHookFunction} hookFunction
    */
   function registerOnTimeValueChange(instance, hookFunction) {
+    // Ensure onChange hook array exists
+    if (!Array.isArray(instance.config.onChange)) {
+      if (typeof instance.config.onChange === "function") {
+        instance.config.onChange = [instance.config.onChange];
+      } else {
+        instance.config.onChange = [];
+      }
+    }
+
     let oldTimeValue = getTimeValue(instance.selectedDates);
+    // Run once initially to apply constraints immediately
     hookFunction(instance.selectedDates);
+
     instance.config.onChange.push(function (selectedDates) {
       const newTimeValue = getTimeValue(selectedDates);
       if (newTimeValue !== oldTimeValue) {
@@ -180,6 +237,6 @@
    * @param {Date[]} selectedDates
    */
   function getTimeValue(selectedDates) {
-    return selectedDates.length ? selectedDates[0].getTime() : 0;
+    return selectedDates && selectedDates.length ? selectedDates[0].getTime() : 0;
   }
 })();
