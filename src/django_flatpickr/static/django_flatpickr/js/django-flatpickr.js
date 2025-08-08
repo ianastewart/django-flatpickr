@@ -1,5 +1,5 @@
 "use strict";
-
+/* AI version */
 (function () {
   if (window.isFlatpickrInitialized) return;
   window.isFlatpickrInitialized = true;
